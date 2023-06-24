@@ -1,0 +1,313 @@
+---
+title: "Decision Trees - Weather related variables only (balanced data)"
+author: "Mandip Farmahan"
+date: "2023-06-13"
+output: html_document
+---
+
+# Import statements
+
+## Import libraries
+
+```{r, message=FALSE}
+library(tidyverse)
+library(here)
+library(splitstackshape)
+library(janitor)
+library(rpart)
+library(rpart.plot)
+library(ranger)
+library(caret)
+library(ROSE)
+```
+
+## Import dataset
+
+```{r, message=FALSE}
+flight_delays_df <- read_csv(here("data/clean_data/flight_delay_clean.csv"))
+```
+
+```{r}
+ewr_delays_df <- flight_delays_df %>% 
+  filter(delay_flag != "Cancelled",
+         origin == "EWR") %>% 
+  mutate(delay_flag = factor(delay_flag, levels = c("No", "Yes"),
+                             labels = c("OnTime", "Delayed")),
+         dest = as_factor(dest),
+         carrier = as_factor(carrier),
+         type = as_factor(type))
+```
+
+
+```{r}
+ewr_delays_df %>% 
+  count(delay_flag)
+
+```
+
+## Create save files
+
+```{r}
+rf_tune_save <- "saved_models/weather_only_bal_rf_tune.RDS"
+```
+
+## Select variables
+
+```{r}
+flight_delays_df %>% 
+  head(3)
+```
+
+```{r}
+delay_trim_df <- ewr_delays_df %>%  
+  select(delay_flag, wind_dir, wind_speed, pres, tavg, prcp,  
+         visib, snow, snwd)
+```
+
+```{r}
+summary(delay_trim_df)
+```
+
+## Create a train/test split of 80:20
+
+The model will be saved during the first execution and then loaded for subsequent analysis to ensure reproducibility.
+
+```{r}
+shuffle_index <- sample(1:nrow(delay_trim_df))
+delay_trim_tidy <- delay_trim_df[shuffle_index, ]
+
+test_train_set <- stratified(delay_trim_tidy,
+                             group = c("delay_flag", "wind_dir",
+                                       "wind_speed"),
+                             size = 0.2,
+                             bothSets = TRUE)
+```
+
+```{r}
+delay_test <- test_train_set$SAMP1
+delay_train <- test_train_set$SAMP2
+```
+
+```{r}
+# calculate number of "Delayed" outcomes in test set for rose_test
+num_delayed_test <- delay_test %>% 
+  summarise(num = sum(delay_flag == "Delayed")) %>% 
+  pull()
+```
+
+```{r}
+# calculate number of "Delayed" outcomes in train set for rose_train
+num_delayed_train <- delay_train %>% 
+  summarise(num = sum(delay_flag == "Delayed")) %>% 
+  pull()
+```
+
+```{r}
+# calculate weight for rf_classifier
+split_weight <- delay_train %>% 
+  summarise(perc = sum(delay_flag == "Delayed") / n()) %>% 
+  pull()
+```
+
+## Check test/train set balance
+
+### `delay_flag` alone
+
+```{r}
+delay_test %>%
+  tabyl(delay_flag)
+```
+
+```{r}
+delay_train %>%
+  tabyl(delay_flag)
+```
+
+### `delay_flag` with `wind_dir`
+
+```{r}
+delay_test %>%
+  tabyl(delay_flag, prcp) %>% 
+  adorn_percentages("col")
+```
+
+```{r}
+delay_train %>%
+  tabyl(delay_flag, prcp) %>% 
+  adorn_percentages("col")
+```
+
+
+### `delay_flag` with `wind_speed`
+
+```{r}
+delay_test %>%
+  tabyl(delay_flag, snow) %>% 
+  adorn_percentages()
+```
+
+```{r}
+delay_train %>%
+  tabyl(delay_flag, snow) %>% 
+  adorn_percentages()
+```
+
+The test/train splits appear balanced.
+
+## Build tree model using training dataset
+
+```{r}
+delay_fit <- rpart(
+  formula = delay_flag ~ ., 
+  data = delay_train, 
+  method = 'class'
+)
+
+rpart.plot(delay_fit,
+           yesno = 2)
+```
+
+```{r}
+rf_classifier <- ranger(delay_flag ~ ., 
+                        data = delay_train,
+                        replace = FALSE,
+                        sample.fraction = c(split_weight, split_weight),
+                        keep.inbag = TRUE,
+                        importance = "impurity", 
+                        num.trees = 500, 
+                        mtry = 2, 
+                        min.node.size = 5)
+
+rf_classifier
+```
+
+```{r}
+#calculate the number of samples for each outcome used
+inbag <- do.call(cbind, rf_classifier$inbag.counts)
+# number of OnTime samples
+colSums(inbag[delay_train$delay_flag == "OnTime", ])[1]
+# number of Delayed samples
+colSums(inbag[delay_train$delay_flag == "Delayed", ])[1]
+```
+
+```{r}
+importance(rf_classifier)
+```
+
+```{r}
+# create balanced test dataset (Delayed vs OnTime)
+rose_test <- ROSE(delay_flag ~ .,
+                   data  = delay_test,
+                   N = num_delayed_test * 2)$data
+
+table(rose_test$delay_flag)
+```
+
+```{r}
+delay_test_pred <- rose_test %>%
+  mutate(pred = predict(rf_classifier,
+                        data = rose_test)$predictions)
+
+confusionMatrix(delay_test_pred$pred,
+                delay_test_pred$delay_flag)
+```
+
+## Random forest tuning
+
+```{r}
+# create balanced test dataset (Delayed vs OnTime)
+rose_train <- ROSE(delay_flag ~ .,
+                   data  = delay_train,
+                   N = num_delayed_train * 2)$data
+
+table(rose_train$delay_flag)
+```
+
+```{r, eval=FALSE}
+# set eval=TRUE and comment out readRDS line in next chunk to run tuning block
+control <- trainControl(
+  method = "repeatedcv", 
+  number = 5, 
+  repeats = 10
+)
+
+tune_grid = expand.grid(
+  mtry = 1:6,
+  splitrule = c("gini", "extratrees"),
+  min.node.size = c(1, 3, 5)
+)
+
+rf_tune <- train(
+  delay_flag ~ .,
+  data = rose_train,
+  method = "ranger",
+  metric = "Kappa",
+  num.trees = 50,
+  importance = "impurity",
+  tuneGrid = tune_grid, 
+  trControl = control
+)
+```
+
+
+```{r}
+rf_tune <- readRDS(rf_tune_save)
+
+plot(rf_tune)
+```
+
+```{r}
+rf_tuned_classifier <- ranger(delay_flag ~ .,
+                              data = delay_train,
+                              replace = FALSE,
+                              sample.fraction = c(split_weight, split_weight),
+                              keep.inbag = TRUE,
+                              importance = "impurity",
+                              num.trees = 500,
+                              mtry = 2,
+                              min.node.size = 5,
+                              splitrule = "gini")
+```
+
+
+```{r}
+#calculate the number of samples for each outcome used
+inbag <- do.call(cbind, rf_tuned_classifier$inbag.counts)
+# number of OnTime samples
+colSums(inbag[delay_train$delay_flag == "OnTime", ])[1]
+# number of Delayed samples
+colSums(inbag[delay_train$delay_flag == "Delayed", ])[1]
+```
+
+```{r}
+importance(rf_tuned_classifier)
+```
+
+```{r}
+# create balanced test dataset (Delayed vs OnTime)
+rose_test <- ROSE(delay_flag ~ .,
+                   data  = delay_test,
+                   N = num_delayed_test * 2)$data
+
+table(rose_test$delay_flag)
+```
+
+```{r}
+delay_tuned_test_pred <- rose_test %>%
+  mutate(pred = predict(rf_tuned_classifier,
+                        data = rose_test)$predictions)
+
+confusionMatrix(data = delay_tuned_test_pred$pred,
+                reference = delay_tuned_test_pred$delay_flag)
+```
+
+```{r}
+# untuned model for comparison using latest rose_test 
+delay_test_pred <- rose_test %>%
+  mutate(pred = predict(rf_classifier,
+                        data = rose_test)$predictions)
+
+confusionMatrix(delay_test_pred$pred,
+                delay_test_pred$delay_flag)
+```
+

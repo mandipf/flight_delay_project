@@ -1,0 +1,472 @@
+---
+title: "Initial analysis on flight delays"
+author: "Mandip Farmahan"
+date: "2023-06-12"
+output: html_document
+---
+
+# Import statements
+
+## Import libraries
+
+```{r, message=FALSE}
+library(tidyverse)
+library(here)
+library(infer)
+```
+
+
+## Import dataset
+
+```{r, message=FALSE}
+flight_delays_df <- read_csv(here("data/clean_data/flight_delay_clean.csv"))
+```
+
+```{r}
+flight_delays_df %>% 
+  head(3)
+
+flight_delays_df %>% 
+  summary()
+```
+
+# How many flights are delayed?
+
+```{r}
+flights_high_level <- flight_delays_df %>% 
+  mutate(day = wday(sch_departure, label = TRUE, abbr = TRUE),
+         month = month(sch_departure, label = TRUE)) %>% 
+  select(sch_departure, day, month, cycle, 
+         origin, dest, dep_delay, delay_flag,
+         distance, carrier, seats)
+
+flights_ewr <- flights_high_level %>% 
+  filter(origin == "EWR") %>% 
+  select(-origin)
+
+flights_high_level %>% 
+  head(3)
+```
+
+<br>
+
+## EWR only
+
+### By month
+
+```{r}
+# flights per month
+flights_ewr %>% 
+  summarise(total_num = sum(delay_flag == "Yes"),
+            .by = month)
+
+# discrete number by month (delayed only)
+flights_ewr %>% 
+  summarise(delayed = sum(delay_flag == "Yes"),
+            .by = month) %>% 
+  ggplot(aes(x=month, y=delayed))+
+  geom_col()
+
+# discrete mean delay by month (delayed only)
+flights_ewr %>%
+  filter(delay_flag == "Yes") %>% 
+  summarise(mean_delay = mean(dep_delay, na.rm = TRUE),
+            .by = month) %>% 
+  ggplot(aes(x=month, y=mean_delay))+
+  geom_col()
+
+# discrete number by month (delayed and on_time only)
+flights_ewr %>% 
+  summarise(delayed = sum(delay_flag == "Yes"),
+            on_time = sum(delay_flag == "No"),
+            .by = month) %>% 
+  pivot_longer(cols = delayed:on_time,
+               names_to = "status",
+               values_to = "value") %>%
+  ggplot(aes(x=month, y=value))+
+  geom_col()+
+  facet_wrap(~status, ncol = 1, scales = "free_y")
+
+# percentage by month
+flights_ewr %>% 
+  summarise(on_time = sum(delay_flag == "No") / n(),
+            delayed = sum(delay_flag == "Yes") / n(),
+            cancelled = sum(delay_flag == "Cancelled") / n(),
+            .by = month) %>% 
+  pivot_longer(cols = on_time:cancelled,
+               names_to = "status",
+               values_to = "value") %>% 
+  ggplot(aes(x = month, y = value,
+             fill = factor(status, levels=c("cancelled", "on_time", "delayed"))))+
+  geom_col()
+```
+
+<br>
+
+### By day
+
+```{r}
+# discrete number by day (delayed only)
+flights_ewr %>% 
+  filter(delay_flag == "Yes") %>% 
+  summarise(delayed = n(),
+            .by = c(day, cycle)) %>% 
+  ggplot(aes(x=factor(cycle,
+                      levels=c("Morning", "Afternoon", "Evening", "Night")),
+             y=delayed, fill=day))+
+  geom_col(position = "dodge")
+
+# discrete mean delay by day (delayed only)
+flights_ewr %>%
+  filter(delay_flag == "Yes") %>% 
+  summarise(mean_delay = mean(dep_delay, na.rm = TRUE),
+            .by = c(day, cycle)) %>% 
+  ggplot(aes(x=factor(cycle,
+                      levels=c("Morning", "Afternoon", "Evening", "Night")),
+             y=mean_delay, fill=day))+
+  geom_col(position = "dodge")
+
+# discrete number by day (delayed and on_time only)
+flights_ewr %>% 
+  summarise(delayed = sum(delay_flag == "Yes"),
+            on_time = sum(delay_flag == "No"),
+            .by = day) %>% 
+  pivot_longer(cols = delayed:on_time,
+               names_to = "status",
+               values_to = "value") %>%
+  ggplot(aes(x=day, y=value))+
+  geom_col()+
+  facet_wrap(~status, ncol = 1, scales = "free_y")
+
+# percentage by day
+flights_ewr %>% 
+  summarise(on_time = sum(delay_flag == "No") / n(),
+            delayed = sum(delay_flag == "Yes") / n(),
+            cancelled = sum(delay_flag == "Cancelled") / n(),
+            .by = day) %>% 
+  pivot_longer(cols = on_time:cancelled,
+               names_to = "status",
+               values_to = "value") %>% 
+  ggplot(aes(x = day, y = value,
+             fill = factor(status, levels=c("cancelled", "on_time", "delayed"))))+
+  geom_col()
+
+
+
+# percentage by day of week
+flights_ewr %>% 
+  summarise(on_time = sum(delay_flag == "No") / n(),
+            delayed = sum(delay_flag == "Yes") / n(),
+            cancelled = sum(delay_flag == "Cancelled") / n(),
+            .by = day) %>% 
+  pivot_longer(cols = on_time:cancelled,
+               names_to = "status",
+               values_to = "value") %>% 
+  ggplot(aes(x=day, y=value, fill=status))+
+  geom_col()
+
+```
+
+<br>
+
+## All airports
+
+### By month
+
+```{r}
+# actual number delayed by month
+flights_high_level %>% 
+  summarise(delayed = sum(delay_flag == "Yes"),
+            .by = c(month, origin)) %>% 
+  pivot_wider(names_from = origin, values_from = delayed) %>% 
+  arrange(month)
+
+# percentage delayed by month
+flights_high_level %>% 
+  summarise(delayed = sum(delay_flag == "Yes") / n(),
+            .by = c(month, origin)) %>% 
+  pivot_wider(names_from = origin, values_from = delayed) %>% 
+  arrange(month)
+
+
+# compare airports by month
+flights_high_level %>% 
+  summarise(on_time = sum(delay_flag == "No") / n(),
+            delayed = sum(delay_flag == "Yes") / n(),
+            cancelled = sum(delay_flag == "Cancelled") / n(),
+            .by = c(month, origin)) %>% 
+  pivot_longer(cols = on_time:cancelled,
+               names_to = "status",
+               values_to = "value") %>%
+  filter(status != "cancelled") %>% 
+  ggplot(aes(x=month, y=value, colour=origin, group=origin))+
+  geom_point()+
+  geom_line()+
+  facet_wrap(~status, ncol = 1, scales = "free_y")
+
+# discrete mean delay by month (delayed only)
+flights_high_level %>%
+  filter(delay_flag == "Yes") %>% 
+  summarise(mean_delay = mean(dep_delay, na.rm = TRUE),
+            .by = c(month, origin)) %>% 
+  ggplot(aes(x=month, y=mean_delay, colour=origin, group=origin))+
+  geom_point()+
+  geom_line()
+```
+
+<br>
+
+### By day
+
+```{r}
+# actual number delayed by day
+flights_high_level %>% 
+  summarise(delayed = sum(delay_flag == "Yes"),
+            .by = c(day, origin)) %>% 
+  pivot_wider(names_from = origin, values_from = delayed)
+
+# percentage delayed by day
+flights_high_level %>% 
+  summarise(delayed = sum(delay_flag == "Yes") / n(),
+            .by = c(day, origin)) %>% 
+  pivot_wider(names_from = origin, values_from = delayed) 
+
+
+# compare airports by day
+flights_high_level %>% 
+  summarise(on_time = sum(delay_flag == "No") / n(),
+            delayed = sum(delay_flag == "Yes") / n(),
+            cancelled = sum(delay_flag == "Cancelled") / n(),
+            .by = c(day, origin)) %>% 
+  pivot_longer(cols = on_time:cancelled,
+               names_to = "status",
+               values_to = "value") %>% 
+  filter(status != "cancelled") %>% 
+  ggplot(aes(x=day, y=value, colour=origin, group=origin))+
+  geom_point()+
+  geom_line()+
+  facet_wrap(~status, ncol = 1, scales = "free_y")
+```
+
+<br>
+
+---
+
+# Statistical tests
+
+## Compare holiday season at EWR
+
+### Proportion of flights delayed
+
+Test whether the proportion of delayed flights during the holidays is significantly higher than the proportion of delayed flights outside the holiday period across the year at a significance level $\alpha = 0.05$.
+
+$$H_0: \pi_{holiday\_delays} - \pi_{not\_holiday\_delays} <= 0$$
+
+$$H_a: \pi_{holiday\_delays} - \pi_{not\_holiday\_delays} > 0$$
+
+```{r}
+ewr_holidays_prop <- flight_delays_df %>% 
+  filter(delay_flag %in% c("Yes", "No")) %>% 
+  mutate(holiday = case_when(
+    between(as.Date(sch_departure), as.Date("2017-03-01"),as.Date("2017-03-31")) ~ "Holiday",
+    between(as.Date(sch_departure), as.Date("2017-06-01"),as.Date("2017-08-31")) ~ "Holiday",
+    between(as.Date(sch_departure), as.Date("2017-12-15"),as.Date("2017-12-31")) ~ "Holiday",
+    .default = "Not Holiday")) %>% 
+    select(holiday, delay_flag)
+
+ewr_holidays_prop %>% 
+  ggplot(aes(x = holiday, fill = delay_flag)) +
+  geom_bar(position = "fill") +
+  coord_flip()
+```
+
+```{r}
+# calculate observed stat
+observed_stat <- ewr_holidays_prop %>% 
+  specify(delay_flag ~ holiday, success = "Yes") %>% 
+  calculate(stat = "diff in props", order = c("Holiday", "Not Holiday"))
+```
+
+```{r}
+# calculate null_distribution
+null_distribution <- ewr_holidays_prop %>%
+  specify(delay_flag ~ holiday, success = "Yes") %>% 
+  hypothesize(null = "independence") %>% 
+  generate(reps = 1000, type = "permute") %>%
+  calculate(stat = "diff in props", order = c("Holiday", "Not Holiday"))
+```
+
+```{r}
+# visualise the null distribution
+null_distribution %>%
+  visualise() +
+  shade_p_value(obs_stat = observed_stat, direction = "right")
+```
+
+```{r}
+# calculate the p-value
+null_distribution %>%
+  get_p_value(obs_stat = observed_stat, direction = "right")
+```
+
+There is strong evidence to reject $H_0$ and conclude that the proportion of delayed flights during the holidays is significantly higher than the proportion of delayed flights outside the holiday period across the year.
+
+### Mean length of delayed flights
+
+Test whether the mean length of flight delays during the holidays is significantly higher than the mean length of flight delays outside the holiday period across the year at a significance level $\alpha = 0.05$.
+
+$$H_0: \mu_{holiday\_delays} - \mu_{not\_holiday\_delays} <= 0$$
+
+$$H_a: \mu_{holiday\_delays} - \mu_{not\_holiday\_delays} > 0$$
+
+```{r}
+ewr_holidays_mean<- flight_delays_df %>% 
+  filter(delay_flag %in% c("Yes", "No")) %>% 
+  mutate(holiday = case_when(
+    between(as.Date(sch_departure), as.Date("2017-03-01"),as.Date("2017-03-31")) ~ "Holiday",
+    between(as.Date(sch_departure), as.Date("2017-06-01"),as.Date("2017-08-31")) ~ "Holiday",
+    between(as.Date(sch_departure), as.Date("2017-12-15"),as.Date("2017-12-31")) ~ "Holiday",
+    .default = "Not Holiday")) %>% 
+    select(holiday, dep_delay)
+
+ewr_holidays_mean %>% 
+  ggplot(aes(x = holiday, y = dep_delay)) +
+  geom_boxplot()
+```
+
+```{r}
+# calculate observed stat
+observed_stat <- ewr_holidays_mean %>% 
+  specify(dep_delay ~ holiday) %>% 
+  calculate(stat = "diff in means", order = c("Holiday", "Not Holiday"))
+```
+
+```{r}
+# calculate null_distribution
+null_distribution <- ewr_holidays_mean %>%
+  specify(dep_delay ~ holiday) %>% 
+  hypothesize(null = "independence") %>% 
+  generate(reps = 1000, type = "permute") %>%
+  calculate(stat = "diff in means", order = c("Holiday", "Not Holiday"))
+```
+
+```{r}
+# visualise the null distribution
+null_distribution %>%
+  visualise() +
+  shade_p_value(obs_stat = observed_stat, direction = "right")
+```
+
+```{r}
+# calculate the p-value
+null_distribution %>%
+  get_p_value(obs_stat = observed_stat, direction = "right")
+```
+
+There is strong evidence to reject $H_0$ and conclude that the mean length of flight delays during the holidays is significantly higher than the mean length of flight delays outside the holiday period across the year.
+
+## Compare airports
+
+### Proportion of flights delayed
+
+Test whether the proportion of delayed flights at EWR is significantly higher than the proportion of delayed flights at JFK and LGA (combined) across the year at a significance level $\alpha = 0.05$.
+
+$$H_0: \pi_{newark\_delays} - \pi_{other\_delays} <= 0$$
+
+$$H_a: \pi_{newark\_delays} - \pi_{other\_delays} > 0$$
+
+```{r}
+airport_prop_diff <- flight_delays_df %>% 
+  filter(delay_flag %in% c("Yes", "No")) %>% 
+  mutate(airport = if_else(origin == "EWR", "EWR", "Other")) %>% 
+  select(airport, delay_flag)
+
+airport_prop_diff %>% 
+  ggplot(aes(x = airport, fill = delay_flag)) +
+  geom_bar(position = "fill") +
+  coord_flip()
+```
+
+```{r}
+# calculate observed stat
+observed_stat <- airport_prop_diff %>% 
+  specify(delay_flag ~ airport, success = "Yes") %>% 
+  calculate(stat = "diff in props", order = c("EWR", "Other"))
+```
+
+```{r}
+# calculate null_distribution
+null_distribution <- airport_prop_diff %>%
+  specify(delay_flag ~ airport, success = "Yes") %>% 
+  hypothesize(null = "independence") %>% 
+  generate(reps = 1000, type = "permute") %>%
+  calculate(stat = "diff in props", order = c("EWR", "Other"))
+```
+
+```{r}
+# visualise the null distribution
+null_distribution %>%
+  visualise() +
+  shade_p_value(obs_stat = observed_stat, direction = "right")
+```
+
+```{r}
+# calculate the p-value
+null_distribution %>%
+  get_p_value(obs_stat = observed_stat, direction = "right")
+```
+
+There is strong evidence to reject $H_0$ and conclude that the proportion of delayed flights at EWR is significantly higher than the proportion of delayed flights at JFK and LGA (combined) across the year.
+
+<br>
+
+### Mean length of delayed flights
+
+Test whether the mean length of flight delays at EWR is significantly higher than the mean length of flight delays at JFK and LGA (combined) across the year at a significance level $\alpha = 0.05$. 
+
+$$H_0: \mu_{newark\_delays} - \mu_{other\_delays} <= 0$$
+
+$$H_a: \mu_{newark\_delays} - \mu_{other\_delays} > 0$$
+
+```{r}
+airport_delay_diff <- flight_delays_df %>% 
+  filter(delay_flag == "Yes") %>%
+  mutate(airport = if_else(origin == "EWR", "EWR", "Other")) %>%
+  select(airport, dep_delay)
+
+airport_delay_diff %>% 
+  ggplot(aes(x = airport, y = dep_delay)) +
+  geom_boxplot()
+```
+
+```{r}
+# calculate observed stat
+observed_stat <- airport_delay_diff %>% 
+  specify(dep_delay ~ airport) %>% 
+  calculate(stat = "diff in means", order = c("EWR", "Other"))
+```
+
+```{r}
+# calculate null_distribution
+null_distribution <- airport_delay_diff %>%
+  specify(dep_delay ~ airport) %>% 
+  hypothesize(null = "independence") %>% 
+  generate(reps = 1000, type = "permute") %>%
+  calculate(stat = "diff in means", order = c("EWR", "Other"))
+```
+
+```{r}
+# visualise the null distribution
+null_distribution %>%
+  visualise() +
+  shade_p_value(obs_stat = observed_stat, direction = "right")
+```
+
+```{r}
+# calculate the p-value
+null_distribution %>%
+  get_p_value(obs_stat = observed_stat, direction = "right")
+```
+
+The p-value is above $\alpha = 0.05$, therefore we fail to reject $H_0$:
+there is no significant evidence that he mean length of flight delays at EWR is significantly higher than the mean length of flight delays at JFK and LGA (combined) across the year.

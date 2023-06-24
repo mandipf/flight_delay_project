@@ -1,0 +1,254 @@
+---
+title: "Plots for presentation"
+author: "Mandip Farmahan"
+date: "2023-06-19"
+output: html_document
+---
+
+# Import statements
+
+## Import libraries
+
+```{r, message=FALSE}
+library(tidyverse)
+library(here)
+library(infer)
+```
+
+## Set plot theme
+
+```{r}
+plot_colours <- c("#ca0020", "#f4a582", "#92c5de", "#0571b0") 
+
+my_theme <- function() {
+  theme(
+    panel.border = element_rect(colour = "lightgrey", fill = NA, linetype = 2),
+    panel.background = element_rect(fill = "white"),
+    panel.grid.major.x = element_blank(),
+    panel.grid.major.y = element_line(colour = "lightgrey", linewidth = 0.2),
+    panel.grid.minor = element_blank(),
+    text = element_text(size = 14),
+    plot.title = element_text(size = 22, hjust = 0.5),
+    plot.subtitle = element_text(size = 18, hjust = 0.5),
+    plot.caption = element_text(size = 10, hjust = 0.5),
+    axis.title = element_text(size = 18),
+    axis.text.y = element_text(size = 14),
+    axis.text.x = element_text(angle = 0, hjust = 0.5, size = 14),
+    legend.title = element_blank(),
+    legend.position = "right"
+  )
+}
+```
+
+## Import dataset
+
+```{r, message=FALSE}
+flight_delays_df <- read_csv(here("data/clean_data/flight_delay_clean.csv"))
+```
+
+# How many flights are delayed?
+
+```{r}
+flights_high_level <- flight_delays_df %>% 
+  mutate(day = wday(sch_departure, label = TRUE, abbr = TRUE),
+         month = month(sch_departure, label = TRUE)) %>% 
+  select(sch_departure, day, month, cycle, 
+         origin, dest, dep_delay, delay_flag,
+         distance, carrier, seats)
+
+flights_ewr <- flights_high_level %>% 
+  filter(origin == "EWR") %>% 
+  select(-origin)
+
+flights_high_level %>% 
+  head(3)
+```
+
+<br>
+
+```{r}
+# flights per hour
+flight_delays_df %>% 
+  mutate(date = date(sch_departure)) %>% 
+  summarise(total = n(),
+            .by = c(date, hour)) %>% 
+  arrange(desc(total))
+
+flights_ewr %>% 
+  summarise(on_time = sum(delay_flag == "No") / n(),
+            delayed = sum(delay_flag == "Yes") / n(),
+            cancelled = sum(delay_flag == "Cancelled") / n()) 
+```
+
+
+
+## EWR only
+
+```{r}
+# percentage total flights per month
+flights_ewr %>% 
+  summarise(prop = n() / nrow(flights_ewr),
+            .by = month) %>% 
+  arrange(desc(prop))
+
+# percentage total flights per day
+flights_ewr %>% 
+  summarise(prop = n() / nrow(flights_ewr),
+            .by = day) %>% 
+  arrange(desc(prop))
+
+# percentage total flights per cycle
+flights_ewr %>% 
+  summarise(prop = n() / nrow(flights_ewr),
+            .by = cycle) %>% 
+  arrange(desc(prop))
+```
+
+```{r}
+# delayed flights per month
+flights_ewr %>% 
+  summarise(total_num = sum(delay_flag == "Yes"),
+            .by = month) %>% 
+  arrange(desc(total_num))
+
+# delayed flights per day
+flights_ewr %>% 
+  summarise(total_num = sum(delay_flag == "Yes"),
+            .by = day) %>% 
+  arrange(desc(total_num))
+
+# delayed flights per cycle
+flights_ewr %>% 
+  summarise(total_num = sum(delay_flag == "Yes"),
+            .by = cycle) %>% 
+  arrange(desc(total_num))
+```
+
+```{r}
+# percentage by month
+flights_ewr %>% 
+  summarise(on_time = sum(delay_flag == "No") / n(),
+            delayed = sum(delay_flag == "Yes") / n(),
+            cancelled = sum(delay_flag == "Cancelled") / n(),
+            .by = month) %>% 
+  pivot_longer(cols = on_time:cancelled,
+               names_to = "status",
+               values_to = "value") %>% 
+  ggplot(aes(x = month, y = value,
+             fill = factor(status,
+                           levels=c("cancelled", "on_time", "delayed"),
+                           labels=c("Cancelled", "On time", "Delayed"))))+
+  geom_col()+
+  labs(title = "Proportion of delayed flights per month",
+       x = "\nMonth", 
+       y = "Proportion of flights\n")+
+  scale_colour_manual(values = plot_colours)+
+  scale_fill_manual(values = plot_colours)+
+  my_theme()
+
+# proportion by day (delayed only)
+flights_ewr %>% 
+  summarise(delayed = sum(delay_flag == "Yes") / n(),
+            .by = c(day, cycle)) %>% 
+  ggplot(aes(x=day, y=delayed,
+             fill=factor(cycle,
+                         levels=c("Morning", "Afternoon", "Evening", "Night"))))+
+  geom_col(position = "dodge")+
+  scale_colour_manual(values = plot_colours)+
+  scale_fill_manual(values = plot_colours)+
+  my_theme()
+
+# proportion by day (delayed only)
+flights_ewr %>% 
+  summarise(delayed = sum(delay_flag == "Yes") / n(),
+            .by = c(day, cycle)) %>% 
+  ggplot(aes(x=day, y=delayed,
+             fill=factor(cycle,
+                         levels=c("Morning", "Afternoon", "Evening", "Night"),
+                         labels=c("5am to 12pm", "12pm to 5pm", "5pm to 9pm", "9pm to 4am"))))+
+  geom_col(position = "dodge")+
+  labs(title = "Proportion of delayed flights per day\n across each time period",
+       x = "\nDay", 
+       y = "Proportion of flights delayed\n")+
+  scale_colour_manual(values = plot_colours)+
+  scale_fill_manual(values = plot_colours)+
+  my_theme()
+```
+
+<br>
+
+## All airports
+
+```{r}
+# actual number of flights by month
+flights_high_level %>% 
+  summarise(total = n(),
+            .by = c(month, origin)) %>% 
+  pivot_wider(names_from = origin, values_from = total) %>% 
+  arrange(month)
+
+# actual number of flights by day
+flights_high_level %>% 
+  summarise(total = n(),
+            .by = c(day, origin)) %>% 
+  pivot_wider(names_from = origin, values_from = total) %>% 
+  arrange(day)
+
+# actual number delayed by month
+flights_high_level %>% 
+  summarise(delayed = sum(delay_flag == "Yes"),
+            .by = c(month, origin)) %>% 
+  pivot_wider(names_from = origin, values_from = delayed) %>% 
+  arrange(month)
+
+# percentage delayed by month
+flights_high_level %>% 
+  summarise(delayed = sum(delay_flag == "Yes") / n(),
+            .by = c(month, origin)) %>% 
+  pivot_wider(names_from = origin, values_from = delayed) %>% 
+  arrange(month)
+```
+
+```{r}
+# compare airports by month
+flights_high_level %>% 
+  summarise(on_time = sum(delay_flag == "No") / n(),
+            delayed = sum(delay_flag == "Yes") / n(),
+            cancelled = sum(delay_flag == "Cancelled") / n(),
+            .by = c(month, origin)) %>% 
+  pivot_longer(cols = on_time:cancelled,
+               names_to = "status",
+               values_to = "value") %>%
+  filter(status == "delayed") %>% 
+  ggplot(aes(x=month, y=value, colour=origin, group=origin, fill=origin))+
+  geom_point(shape = 21, size = 3)+
+  geom_line(linewidth = 1)+
+  labs(title = "Proportion of delayed flights per month\n across all airports",
+       x = "\nMonth", 
+       y = "Proportion of flights delayed\n")+
+  #facet_wrap(~status, ncol = 1, scales = "free_y")+
+  scale_colour_manual(values = plot_colours)+
+  scale_fill_manual(values = plot_colours)+
+  my_theme()
+
+# compare airports by day
+flights_high_level %>% 
+  summarise(on_time = sum(delay_flag == "No") / n(),
+            delayed = sum(delay_flag == "Yes") / n(),
+            cancelled = sum(delay_flag == "Cancelled") / n(),
+            .by = c(day, origin)) %>% 
+  pivot_longer(cols = on_time:cancelled,
+               names_to = "status",
+               values_to = "value") %>% 
+  filter(status == "delayed") %>% 
+  ggplot(aes(x=day, y=value, colour=origin, group=origin, fill=origin))+
+  geom_point(shape = 21, size = 3)+
+  geom_line(linewidth = 1)+
+  labs(title = "Proportion of delayed flights per day\n across all airports",
+           x = "\nDay", 
+           y = "Proportion of flights delayed\n")+
+  #facet_wrap(~status, ncol = 1, scales = "free_y")+
+  scale_colour_manual(values = plot_colours)+
+  scale_fill_manual(values = plot_colours)+
+  my_theme()
+```

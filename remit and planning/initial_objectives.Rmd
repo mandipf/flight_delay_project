@@ -1,0 +1,59 @@
+---
+title: "Initial Objectives"
+author: "Mandip Farmahan"
+date: "2023-06-11"
+output: html_document
+---
+
+# Initial objectives
+
+## Ideas for business remit
+
+1. How bad are the delays?
+2. What are the common features that cause delays (weather, plane, airport infrastructure)?
+3. Does the location of airport (or its facilities) matter (hypothesis test)?
+
+Extension: Could this lead to selecting certain types of plane based on the weather forecast (predictor model)?
+
+### After conversation with John (Friday afternoon):
+
+1. What conditions would cause a delay at each airport?
+2. If the weather is a key issues, Which parts of the weather cause those delays?
+
+
+## Deeper dive
+
+Causes of delays:
+
+- Weather
+  - physical: snow
+  - visibility: rain, precipitation, fog
+  - atmospheric: wind, pressure, temperature
+
+- Airport
+  - volume of passengers (unknown for this dataset)
+    - could check for seasonal issue (summer holidays vs school term time vs Christmas)
+    - days of week (weekday vs weekend)
+    
+  - volume of flights per day
+  - volume of flights per time period (early morning, afternoon, evening, night)
+
+- Plane
+  - direction of travel
+  - size: num passengers, power of plane
+  - long haul (more frequent as can recover time during flight?) vs short haul
+
+
+Extension: look at cancelled flights
+
+## Definition of delay
+
+U.S. Department of Transportation Federal Aviation Administration (FAA) Order JO 7210.55F states:
+
+*"Reportable delays. Delays to instrument flight rules (IFR) traffic of 15 minutes or more, which result from the ATC system detaining an aircraft at the gate, short of the runway, on the runway, on a taxiway, or in a holding configuration anywhere en route must be reported."*
+
+Interpretation for this project:
+
+- multiple levels of delay (based on compensation) or just yes/no?
+  - % of flights per bin
+  - do we need to look at leaving early too?

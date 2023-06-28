@@ -108,7 +108,7 @@ obtained from:
 [Meteostat](https://meteostat.net/en/)
 
 [National Centres For Environmental Information
-NOAA](https://www.ncdc.noaa.gov/cdo-web/search?datasetid=GHCND)
+(NOAA)](https://www.ncdc.noaa.gov/cdo-web/search?datasetid=GHCND)
 
 <br>
 
@@ -117,7 +117,7 @@ NOAA](https://www.ncdc.noaa.gov/cdo-web/search?datasetid=GHCND)
 ## Exploratory data analysis
 
 The exploratory data analysis script
-(`raw_data_file_and_variable_exploration.html`) is located in the
+(`raw_data_file_and_variable_exploration.Rmd`) is located in the
 `analysis_scripts/R` folder. The libraries required to run the
 exploratory data analysis script are:
 
@@ -150,7 +150,7 @@ library(tidyverse)
 
 <br>
 
-The following data cleaning tasks were carried out :
+The following data cleaning tasks were carried out:
 
 -   Import the data from the CSV files;
 -   Create a single date/time reference for each flight;
@@ -196,14 +196,14 @@ This was followed up with a cross-airport investigation.
 
 <br>
 
-Statistical testing was carried out to test if the proportion of delayed
+Statistical analysis was carried out to test if the proportion of delayed
 flights at EWR was significantly higher than the proportion of delayed
 flights at JFK and LGA (combined) across the year at a significance
 level $\alpha = 0.05$.
 
-$$H_0: \pi_{newark\_delays} - \pi_{other\_delays} <= 0$$
+$$H_0: \pi_{NewarkDelays} - \pi_{OtherDelays} <= 0$$
 
-$$H_a: \pi_{newark\_delays} - \pi_{other\_delays} > 0$$
+$$H_a: \pi_{NewarkDelays} - \pi_{OtherDelays} > 0$$
 
 There was strong evidence to reject $H_0$ and conclude that the
 proportion of delayed flights at EWR was significantly higher than the
@@ -211,7 +211,7 @@ proportion of delayed flights at JFK and LGA (combined) across the year.
 
 <br>
 
-Full details can be seen in `initial_analysis_on_flight_delays.html`,
+Full details can be seen in `initial_analysis_on_flight_delays.Rmd`,
 which is located in the `analysis_scripts/R` folder. This task was
 completed using `RStudio`.
 
@@ -226,7 +226,7 @@ impact of weather elements on flight departure delays:
 
 <br>
 
-Full details can be seen in `model_with_weather_only.html`, which is
+Full details can be seen in `model_with_weather_only.ipynb`, which is
 located in the `analysis_scripts/Python` folder.
 
 <br>
@@ -241,7 +241,7 @@ weather and airport factors:
 
 <br>
 
-Full details can be seen in `model_with_final_vars.html`, which is
+Full details can be seen in `model_with_final_vars.ipynb`, which is
 located in the `analysis_scripts/Python` folder. This predictive model
 was also trialled using data from the JFK and LGA airports with an AUC
 of 0.640 and 0.658 respectively.

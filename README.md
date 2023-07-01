@@ -4,8 +4,7 @@ By Mandip Farmahan (2023-06-21)
 
 <br>
 
-This project was completed using both **R (RStudio)** and **Python
-(Jupyter Notebooks)**.
+This project was completed using both **R (RStudio)** and **Python (Jupyter Notebooks)**.
 
 ------------------------------------------------------------------------
 
@@ -244,7 +243,7 @@ weather and airport factors:
 Full details can be seen in `model_with_final_vars.ipynb`, which is
 located in the `analysis_scripts/Python` folder. This predictive model
 was also trialled using data from the JFK and LGA airports with an AUC
-of 0.640 and 0.658 respectively.
+of 0.694 and 0.720 respectively.
 
 <br>
 
@@ -253,11 +252,11 @@ of 0.640 and 0.658 respectively.
 ## Conclusions
 
 -   24% of flights from EWR in 2017 had departure delays.
--   Weather alone is not responsible for departure delays. Weather
+-   Weather alone is not responsible for departure delays, therefore weather
     related airport improvements unlikely to cause a decrease in
     departure delays.
 -   Time of flight and number flights per day are most important.
--   40% of flights are in the morning and only 5% at night. Flights
+-   40% of flights are in the morning and only 5% at night, therefore flights
     should be more evenly spread across the day or reduce total number
     of flights.
 -   Delays in general are worse at EWR than LGA and JFK, however more
